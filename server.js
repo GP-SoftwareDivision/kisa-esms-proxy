@@ -1,8 +1,10 @@
 const cors = require('cors');
 const express = require('express');
 const dotenv = require('dotenv');
+const path = require('path');
 const authRoutes = require('./routes/auth');
 const uploadRoutes = require('./routes/upload');
+const fileUploadRoutes = require('./routes/fileUpload');
 const axios = require('axios')
 dotenv.config();
 
@@ -20,6 +22,14 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// 업로드된 파일 다운로드를 위한 정적 파일 제공
+// 로컬 개발: proxy/uploads, Docker: /app/files
+const uploadsPath = process.env.NODE_ENV === 'production' 
+  ? '/app/files' 
+  : path.join(__dirname, 'uploads');
+console.log('파일 제공 경로:', uploadsPath);
+app.use('/files', express.static(uploadsPath));
 
 app.use('/api', async (req, res) => {
   try {
@@ -45,7 +55,8 @@ app.use('/api', async (req, res) => {
 
 // 라우터 설정
 app.use('/auth', authRoutes);
-app.use('/upload', uploadRoutes);
+app.use('/upload', uploadRoutes); // 기존 업로드 (유지)
+app.use('/file-upload', fileUploadRoutes); // 새로운 파일 업로드 (CSV/XLSX)
 
 // 서버 실행
 app.listen(PORT, () => {
