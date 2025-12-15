@@ -4,6 +4,22 @@ const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
 
+/**
+ * 업로드 디렉토리 경로 가져오기
+ * 우선순위:
+ * 1. 환경변수 SFTP_UPLOAD_DIR (SFTP 서버 경로)
+ * 2. 운영 환경 (/app/files)
+ * 3. 개발 환경 (../uploads)
+ */
+const getUploadDir = () => {
+    if (process.env.SFTP_UPLOAD_DIR) {
+        return process.env.SFTP_UPLOAD_DIR;
+    }
+    return process.env.NODE_ENV === 'production' 
+        ? '/app/files' 
+        : path.join(__dirname, '../uploads');
+};
+
 // CSV, XLSX 파일 업로드 설정
 const upload = multer({
     dest: 'uploads/',
@@ -41,10 +57,7 @@ const upload = multer({
 async function saveUploadedFile(localFilePath, fileName) {
     console.log('파일 저장 시작:', fileName);
     try {
-        // 로컬 개발: proxy/uploads, Docker: /app/files
-        const uploadDir = process.env.NODE_ENV === 'production' 
-            ? '/app/files' 
-            : path.join(__dirname, '../uploads');
+        const uploadDir = getUploadDir();
 
         console.log('저장 경로:', uploadDir);
         
@@ -116,7 +129,8 @@ router.delete('/:fileName', async (req, res) => {
     const { fileName } = req.params;
     
     try {
-        const filePath = path.join('/app/files', fileName);
+        const uploadDir = getUploadDir();
+        const filePath = path.join(uploadDir, fileName);
         
         if (!fs.existsSync(filePath)) {
             return res.status(404).send({ 
