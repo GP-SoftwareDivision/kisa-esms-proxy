@@ -35,8 +35,7 @@ async function uploadFileDevelop(localFilePath, sftpFileName) {
         fs.unlinkSync(localFilePath); // 원본 파일 삭제
 
         console.log('파일 저장 성공:', destinationPath);
-
-        console.log('파일 저장 성공:', destinationPath);
+		
         return destinationPath;
     } catch (err) {
         console.error('파일 업로드 중 오류 발생: ', err);

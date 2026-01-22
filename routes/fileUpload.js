@@ -72,26 +72,38 @@ const upload = multer({
     dest: 'uploads/',
     limits: { fileSize: 100 * 1024 * 1024 }, // 100MB 제한
     fileFilter: (req, file, cb) => {
-        // CSV, XLSX 파일만 허용
-        const allowedExtensions = ['.csv', '.xlsx', '.xls'];
+        // XLSX 파일만 허용
+        const allowedExtensions = ['.xlsx'];
         const ext = path.extname(file.originalname).toLowerCase();
         
         if (allowedExtensions.includes(ext)) {
             cb(null, true);
         } else {
-            cb(new Error('CSV 또는 XLSX 파일만 업로드 가능합니다.'));
+            cb(new Error('xlsx 형식의 파일만 업로드 가능합니다.'));
         }
     },
     storage: multer.diskStorage({
         filename: function (_req, file, cb) {
-            // 한글 파일명 처리
-            file.originalname = Buffer.from(file.originalname, 'latin1').toString('utf8');
+            // 한글 파일명 깨짐 방지 (latin1 -> utf8 재인코딩)
+            // 브라우저에서 보낸 파일명이 latin1으로 잘못 인식된 경우를 복구합니다.
+            try {
+                if (/[^\u0000-\u00ff]/.test(file.originalname)) {
+                    // 이미 유니코드가 포함되어 있다면 그대로 진행
+                } else {
+                    file.originalname = Buffer.from(file.originalname, 'latin1').toString('utf8');
+                }
+            } catch (e) {
+                console.error('파일명 인코딩 변환 오류:', e);
+            }
             
             // 파일명 중복 방지 (타임스탬프 추가)
             const timestamp = Date.now();
             const ext = path.extname(file.originalname);
             const nameWithoutExt = path.basename(file.originalname, ext);
-            const uniqueFileName = `${nameWithoutExt}_${timestamp}${ext}`;
+            
+            // 특수문자 제거 및 공백을 언더바로 변경 (파일명 안전성 확보)
+            const safeName = nameWithoutExt.replace(/[<>:"/\\|?*]/g, '').replace(/\s+/g, '_');
+            const uniqueFileName = `${safeName}_${timestamp}${ext}`;
             
             cb(null, uniqueFileName);
         },
