@@ -4,8 +4,9 @@ const dotenv = require('dotenv');
 const path = require('path');
 const authRoutes = require('./routes/auth');
 const uploadRoutes = require('./routes/upload');
-const fileUploadRoutes = require('./routes/fileUpload');
+const { router: fileUploadRoutes, getFromSftp, getUploadDir } = require('./routes/fileUpload');
 const axios = require('axios')
+const fs = require('fs'); // Added fs module
 dotenv.config();
 
 const app = express();
@@ -23,13 +24,43 @@ app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// 업로드된 파일 다운로드를 위한 정적 파일 제공
+// 업로드된 파일 다운로드 설정
 // 로컬 개발: proxy/uploads, Docker: /app/files
 const uploadsPath = process.env.NODE_ENV === 'production' 
   ? '/app/files' 
   : path.join(__dirname, 'uploads');
-console.log('파일 제공 경로:', uploadsPath);
+
+// 1. 먼저 로컬에서 정적 파일 찾기
 app.use('/files', express.static(uploadsPath));
+
+// 2. 로컬에 없는 경우 SFTP 서버에서 직접 가져오기 (Smart Fallback)
+app.get('/files/:fileName', async (req, res) => {
+    try {
+        const { fileName } = req.params;
+        const fileBuffer = await getFromSftp(fileName);
+        
+        if (fileBuffer) {
+            // 로컬 캐싱 (다음 요청 최적화 및 컨테이너 복구)
+            const localPath = path.join(getUploadDir(), fileName);
+            const uploadDir = getUploadDir();
+            if (!fs.existsSync(uploadDir)) {
+                fs.mkdirSync(uploadDir, { recursive: true });
+            }
+            fs.writeFileSync(localPath, fileBuffer);
+
+            // 파일 전송
+            res.setHeader('Content-Type', 'application/octet-stream');
+            // 한글 파일명 다운로드 깨짐 방지 처리
+            res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`);
+            return res.send(fileBuffer);
+        }
+        
+        res.status(404).send('File not found');
+    } catch (error) {
+        console.error('SFTP 폴백 처리 중 오류:', error);
+        res.status(500).send('Server error');
+    }
+});
 
 app.use('/api', async (req, res) => {
   try {
